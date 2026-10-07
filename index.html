@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>The Papousek Team — Comment-to-Inbox Demo</title>
+<!--
+  PUBLIC DEMO — V1 "COMMENT → LINK → FORM → EMAIL" SIMULATOR, single self-contained file.
+  THEMED VARIANT mapped onto a REAL Instagram post: @aprilpapousek's 1459 Stavebank Rd
+  reel (https://www.instagram.com/reel/DYSO0weEShm/, posted 2026-05-13,
+  99 likes, 6 comments, caption ends "DM today for your private showing").
+  A visitor comments on the reel, gets an instant DM with a link, taps it, fills a
+  30-second lead form, and April receives a mock email with the captured
+  details — the punchline of the demo.
+  No backend, no CDNs, no fonts, no network calls. Works from file:// or any
+  static host (e.g. GitHub Pages). Rebrand via the CONFIG block in the script.
+-->
+<style>
+  :root{
+    --brand:#a31818; --brand-dark:#7c1010; --bg:#f7f4f2; --ink:#1f2937;
+    --bot-bubble:#ffffff; --user-bubble:#a31818; --ig-border:#dbdbdb;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg); color:var(--ink); min-height:100vh}
+  .wrap{max-width:560px; margin:0 auto; padding:24px 16px 60px}
+  .demo-label{text-align:center; font-size:.75rem; letter-spacing:.12em; text-transform:uppercase;
+    color:#9ca3af; margin-bottom:12px}
+  /* ---- fake Instagram post ---- */
+  .post{background:#fff; border:1px solid var(--ig-border); border-radius:12px; overflow:hidden;
+    box-shadow:0 2px 12px rgba(0,0,0,.06)}
+  .post-head{display:flex; align-items:center; gap:10px; padding:12px 14px}
+  .avatar{width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg,#d9a06b,#a31818);
+    display:flex; align-items:center; justify-content:center; font-size:20px; flex:none}
+  .post-head .who{flex:1; min-width:0}
+  .post-head .who b{display:block; font-size:.88rem}
+  .post-head .who span{font-size:.72rem; color:#6b7280}
+  .follow-btn{border:1.5px solid var(--brand); color:var(--brand); background:#fff; border-radius:8px;
+    padding:6px 14px; font-size:.8rem; font-weight:700; cursor:pointer}
+  .reel{position:relative; height:420px;
+    background:linear-gradient(160deg,#3b4a5e 0%,#1f2937 55%,#111827 100%);
+    display:flex; align-items:center; justify-content:center; font-size:120px;
+    text-shadow:0 6px 24px rgba(0,0,0,.3)}
+  .reel .play{position:absolute; width:76px; height:76px; border-radius:50%;
+    background:rgba(255,255,255,.92); display:flex; align-items:center; justify-content:center;
+    font-size:30px; color:var(--brand-dark); padding-left:6px}
+  .reel .reel-tag{position:absolute; top:12px; left:12px; background:rgba(0,0,0,.55); color:#fff;
+    font-size:.7rem; font-weight:700; padding:4px 10px; border-radius:6px; letter-spacing:.06em}
+  .post-actions{display:flex; gap:16px; padding:10px 14px 2px; font-size:24px}
+  .post-actions span:last-child{margin-left:auto}
+  .likes{padding:6px 14px 0; font-size:.85rem; font-weight:700}
+  .caption{padding:6px 14px; font-size:.85rem; line-height:1.5}
+  .caption b{font-weight:700}
+  .view-comments{padding:6px 14px; font-size:.82rem; color:#6b7280; cursor:pointer}
+  #comments{padding:2px 14px 6px; display:flex; flex-direction:column; gap:8px; font-size:.85rem}
+  .comment{line-height:1.45}
+  .comment b{font-weight:700; margin-right:6px}
+  .comment .reply{margin-left:28px; margin-top:4px; padding-left:10px; border-left:2px solid var(--brand)}
+  .comment .reply .agent{color:var(--brand-dark); font-weight:700; margin-right:6px}
+  .comment .auto-tag{display:inline-block; background:#fef2f2; border:1px solid var(--brand);
+    color:var(--brand-dark); font-size:.68rem; font-weight:700; border-radius:999px;
+    padding:1px 8px; margin-left:8px; vertical-align:middle}
+  .comment-box{border-top:1px solid var(--ig-border); padding:10px 14px}
+  .comment-chips{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px}
+  .cchip{border:1.5px solid var(--brand); color:var(--brand); background:#fff; border-radius:999px;
+    padding:6px 14px; font-size:.8rem; font-weight:600; cursor:pointer}
+  .cchip:hover{background:var(--brand); color:#fff}
+  .comment-row{display:flex; gap:8px}
+  #comment-input{flex:1; border:1.5px solid #d1d5db; border-radius:999px; padding:10px 16px;
+    font-size:.88rem; outline:none}
+  #comment-input:focus{border-color:var(--brand)}
+  #comment-post{background:none; border:none; color:var(--brand); font-weight:700; font-size:.88rem;
+    cursor:pointer; padding:0 6px}
+  .sim-note{margin-top:16px; padding:14px 16px; background:#fff; border-radius:12px;
+    font-size:.82rem; color:#6b7280; line-height:1.6; border:1px dashed var(--brand)}
+  .sim-note b{color:var(--brand-dark)}
+  /* ---- DM panel (slides in from the right, phone-style) ---- */
+  #dm-panel{position:fixed; top:0; right:0; width:400px; max-width:100vw; height:100%;
+    background:#fff; z-index:1000; display:flex; flex-direction:column;
+    box-shadow:-12px 0 40px rgba(0,0,0,.18);
+    transform:translateX(105%); transition:transform .45s cubic-bezier(.22,.9,.3,1)}
+  #dm-panel.open{transform:translateX(0)}
+  #dm-panel header{background:#fff; border-bottom:1px solid var(--ig-border); padding:12px 14px;
+    display:flex; gap:10px; align-items:center}
+  #dm-panel header .who{flex:1; min-width:0}
+  #dm-panel header .who b{display:block; font-size:.92rem}
+  #dm-panel header .who span{font-size:.72rem; color:#22c55e}
+  #dm-close{background:none; border:none; font-size:20px; cursor:pointer; padding:4px; color:#374151}
+  .dm-auto-banner{background:#fef2f2; border-bottom:1px solid #fecaca; color:var(--brand-dark);
+    font-size:.72rem; font-weight:600; text-align:center; padding:6px}
+  #dm-body{flex:1; overflow-y:auto; padding:16px 14px; display:flex; flex-direction:column; gap:12px;
+    background:#fafafa}
+  .msg{max-width:85%; padding:10px 14px; border-radius:18px; font-size:.9rem; line-height:1.5;
+    white-space:pre-wrap; word-wrap:break-word; background:#fff; border:1px solid #e5e7eb;
+    border-bottom-left-radius:4px; align-self:flex-start; box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  .listing-strip{align-self:stretch; background:#fff; border:1.5px solid var(--brand); border-radius:14px;
+    padding:10px 14px; font-size:.85rem; line-height:1.5}
+  .listing-strip .lp{font-weight:800; color:var(--brand-dark); font-size:1rem}
+  .dm-link-btn{display:block; width:100%; background:var(--brand); color:#fff; border:none;
+    border-radius:14px; padding:14px; font-size:1rem; font-weight:700; cursor:pointer;
+    text-align:center; box-shadow:0 6px 18px rgba(163,24,24,.35)}
+  .dm-link-btn:hover{background:var(--brand-dark)}
+  .dm-link-hint{text-align:center; font-size:.75rem; color:#6b7280}
+  .back-link{background:none; border:none; color:var(--brand); font-size:.85rem; font-weight:600;
+    cursor:pointer; align-self:flex-start; padding:0}
+  .back-link:hover{text-decoration:underline}
+  /* ---- lead form ---- */
+  .lead-form{background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:16px 14px;
+    display:flex; flex-direction:column; gap:12px}
+  .lead-form .lf-title{font-weight:800; font-size:.95rem}
+  .field label{display:block; font-size:.78rem; font-weight:700; color:#374151; margin-bottom:5px}
+  .field input{width:100%; border:1.5px solid #d1d5db; border-radius:10px; padding:10px 12px;
+    font-size:.9rem; outline:none}
+  .field input:focus{border-color:var(--brand)}
+  .field input.bad{border-color:#dc2626}
+  .ferror{display:none; font-size:.75rem; color:#dc2626; margin-top:4px}
+  .ferror.show{display:block}
+  .chip-row{display:flex; gap:8px; flex-wrap:wrap}
+  .chip{border:1.5px solid var(--brand); color:var(--brand); background:#fff; border-radius:999px;
+    padding:6px 14px; font-size:.82rem; font-weight:600; cursor:pointer}
+  .chip.sel{background:var(--brand); color:#fff}
+  .submit-btn{background:var(--brand); color:#fff; border:none; border-radius:12px; padding:13px;
+    font-size:.95rem; font-weight:700; cursor:pointer}
+  .submit-btn:hover{background:var(--brand-dark)}
+  .form-note{font-size:.72rem; color:#6b7280; text-align:center}
+  /* ---- mock email (the punchline) ---- */
+  .email-card{align-self:stretch; background:#fff; border:1.5px solid var(--brand); border-radius:14px;
+    overflow:hidden; box-shadow:0 4px 16px rgba(163,24,24,.14)}
+  .email-card .em-head{background:#fef2f2; border-bottom:1px solid #fecaca; padding:10px 14px;
+    font-size:.78rem; line-height:1.7; color:#374151}
+  .email-card .em-head b{color:var(--brand-dark)}
+  .email-card .em-subject{padding:10px 14px; font-weight:800; font-size:.92rem;
+    border-bottom:1px solid #f3f4f6}
+  .email-card .em-body{padding:12px 14px; font-size:.85rem; line-height:1.7}
+  .email-card .em-row{margin:3px 0}
+  .email-card .em-row b{color:#374151}
+  .email-card .em-tag{margin-top:8px; padding:8px 10px; background:#fef2f2; border-radius:8px;
+    font-size:.78rem; color:var(--brand-dark); font-weight:600}
+  .email-card .em-foot{padding:8px 14px 12px; font-size:.7rem; color:#9ca3af}
+  .success-note{align-self:stretch; text-align:center; font-size:.9rem; font-weight:700;
+    color:var(--brand-dark)}
+  #dm-mode-tag{text-align:center; font-size:.68rem; color:#9ca3af; padding:6px; background:#fafafa}
+  @media (max-width:480px){
+    #dm-panel{width:100%}
+    .reel{height:340px}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="demo-label">Simulated Instagram reel · @aprilpapousek · demo</div>
+
+  <div class="post">
+    <div class="post-head">
+      <div class="avatar">🏡</div>
+      <div class="who"><b id="ig-handle">aprilpapousek</b><span>10,456 followers · Original audio</span></div>
+      <button class="follow-btn">Follow</button>
+    </div>
+
+    <div class="reel" role="img" aria-label="Listing video">
+      <span class="reel-tag">REEL</span>
+      🏡
+      <div class="play">▶</div>
+    </div>
+
+    <div class="post-actions"><span>🤍</span><span>💬</span><span>📤</span><span>🔖</span></div>
+    <div class="likes">99 likes</div>
+    <div class="caption"><b>aprilpapousek</b> Welcome to 1459 Stavebank Rd — a custom-built Mineola West
+      masterpiece with approx. 10,000 sq ft of refined living, a chef's dream kitchen, saltwater pool
+      and resort-style backyard.<br><br>
+      Offered for $5,999,850<br><br>
+      <b>DM today for your private showing.</b></div>
+    <div class="sample-note" style="padding:6px 14px;font-size:.78rem;color:#6b7280">📌 Sample: this demo mirrors a real
+      post — in production your system watches the realtor's actual posts.</div>
+    <div class="view-comments">View all 6 comments</div>
+
+    <div id="comments">
+      <div class="comment"><b>mineola.dreamer</b>This one is stunning — DM'ing you about Stavebank! 👀</div>
+      <div class="comment"><b>south.miss.buyer</b>10,000 sq ft?? Do you offer private showings this weekend?
+        <div class="reply"><span class="agent">aprilpapousek</span>Yes! Just sent you a DM 📩<span class="auto-tag">auto-reply</span></div>
+      </div>
+      <div class="comment"><b>portcredit.local</b>Mineola West is such a special pocket. 😍</div>
+    </div>
+
+    <div class="comment-box">
+      <div class="comment-chips">
+        <button class="cchip" data-text="Please DM me the details 🙏">Please DM me the details 🙏</button>
+        <button class="cchip" data-text="Interested — can I book a private showing?">Interested — can I book a private showing?</button>
+        <button class="cchip" data-text="This is gorgeous! Info please?">This is gorgeous! Info please?</button>
+      </div>
+      <div class="comment-row">
+        <input id="comment-input" type="text" placeholder="Add a comment as @you…" autocomplete="off">
+        <button id="comment-post">Post</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sim-note">💡 <b>Demo: how this works on @aprilpapousek's Stavebank reel — every interested
+    commenter answered in seconds.</b> Comment → DM link → 30-second form → instant email to the agent.</div>
+</div>
+
+<!-- Phone-style DM thread that slides in when the automation fires -->
+<div id="dm-panel" role="dialog" aria-label="Instagram direct messages">
+  <header>
+    <div class="avatar">🏡</div>
+    <div class="who"><b id="dm-agent-line">aprilpapousek</b><span>● Active now</span></div>
+    <button id="dm-close" aria-label="Close DM">✕</button>
+  </header>
+  <div class="dm-auto-banner">⚡ Automated replies are on — April is at a showing</div>
+  <div id="dm-body"></div>
+  <div id="dm-mode-tag">● demo mode v1 — comment → link → form → email</div>
+</div>
+
+<script>
+/* ============================================================================
+ * CONFIG — rebrand the demo here. Nothing else in this file needs to change.
+ * ========================================================================== */
+const CONFIG = {
+  AGENCY_NAME: "The Papousek Team",
+  AGENT_NAME: "April Papousek",
+  AGENT_PHONE: "+14168327187",
+  IG_HANDLE: "aprilpapousek",
+  LISTING: { addr: "1459 Stavebank Rd, Mineola West",
+             price: "$5,999,850 · ~10,000 sq ft · 5+1 bd, 7 ba",
+             mls: "via IG reel DYSO0weEShm" }
+};
+
+/* Shared HTML escaper — top level so every renderer can use it. */
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* Simple contact check reused from the website bot: email regex or 7–15 digits. */
+function parseContact(text){
+  const em = /[\w.+\-]+@[\w.\-]+\.\w+/.exec(text);
+  if (em) return em[0];
+  const digits = String(text).replace(/\D/g,"");
+  if (digits.length >= 7 && digits.length <= 15) return "+" + digits;
+  return null;
+}
+
+/* ============================================================================
+ * UI WIRING (browser only — no network calls, everything runs local)
+ * Three DM views: invite (greeting + link) → form → success + mock email.
+ * ========================================================================== */
+(function(){
+  if (typeof document === "undefined") return;
+
+  const commentsBox = document.getElementById('comments'),
+        commentInput = document.getElementById('comment-input'),
+        commentPost = document.getElementById('comment-post'),
+        dmPanel = document.getElementById('dm-panel'),
+        dmBody = document.getElementById('dm-body'),
+        dmClose = document.getElementById('dm-close');
+
+  const VISITOR = "you";
+  let dmOpened = false, submitted = false;
+  const form = { timeline: "" }; // chip selections
+
+  /* ---- Instagram side: posting comments + agency auto-replies ---- */
+  function addComment(user, text){
+    const d = document.createElement('div');
+    d.className = 'comment';
+    d.innerHTML = '<b>' + esc(user) + '</b>' + esc(text);
+    commentsBox.appendChild(d);
+    return d;
+  }
+
+  function addAutoReply(commentEl, text){
+    const r = document.createElement('div');
+    r.className = 'reply';
+    r.innerHTML = '<span class="agent">' + esc(CONFIG.IG_HANDLE) +
+      '</span>' + esc(text) + '<span class="auto-tag">auto-reply</span>';
+    commentEl.appendChild(r);
+  }
+
+  // Demo keyword matcher: DM / details / showing / interested variants. Production
+  // reads the client's keyword config from the Meta comment webhook payload.
+  function isTriggerKeyword(text){
+    return /\b(dm|details|showing|info|interested|price|available)\b/i.test(text);
+  }
+
+  function postComment(){
+    const text = (commentInput.value || "").trim();
+    if (!text) return;
+    commentInput.value = '';
+    const el = addComment(VISITOR, text);
+    // ~1s later the automation fires: public auto-reply + DM opens.
+    setTimeout(() => {
+      if (isTriggerKeyword(text)){
+        addAutoReply(el, "Just sent you a DM with the details! 📩");
+      } else {
+        addAutoReply(el, "Thanks for asking! Just sent you a DM 📩");
+      }
+      openDM();
+    }, 1000);
+  }
+
+  commentPost.onclick = postComment;
+  commentInput.addEventListener('keydown', e => { if (e.key === 'Enter') postComment(); });
+  document.querySelectorAll('.cchip').forEach(c => {
+    c.onclick = () => { commentInput.value = c.getAttribute('data-text'); postComment(); };
+  });
+
+  /* ---- DM view 1: invite (greeting + prominent link button) ---- */
+  function renderInvite(){
+    const l = CONFIG.LISTING;
+    dmBody.innerHTML =
+      '<div class="msg">Thanks for your comment! 🙌 You asked April to DM the details — tap below, ' +
+      '30 seconds, and ' + esc(CONFIG.AGENT_NAME) + ' gets your info instantly.</div>' +
+      '<div class="listing-strip"><div class="lp">' + esc(l.addr) + '</div>' +
+      '<div>' + esc(l.price) + '</div>' +
+      '<div style="color:#6b7280;font-size:.78rem">' + esc(l.mls) + '</div></div>' +
+      '<button class="dm-link-btn" id="open-form">Share my details →</button>' +
+      '<div class="dm-link-hint">Opens a 30-second form — no app needed</div>';
+    document.getElementById('open-form').onclick = renderForm;
+  }
+
+  function openDM(){
+    dmPanel.classList.add('open');
+    if (!dmOpened){
+      dmOpened = true;
+      renderInvite();
+    }
+  }
+
+  /* ---- DM view 2: the 30-second lead form ---- */
+  function chipRow(options, group, current){
+    return '<div class="chip-row">' + options.map(o =>
+      '<button type="button" class="chip' + (o === current ? ' sel' : '') +
+      '" data-group="' + group + '" data-val="' + esc(o) + '">' + esc(o) + '</button>').join("") + '</div>';
+  }
+
+  function renderForm(){
+    const l = CONFIG.LISTING;
+    dmBody.innerHTML =
+      '<button class="back-link" id="back-to-invite">← Back to chat</button>' +
+      '<div class="listing-strip"><div class="lp">' + esc(l.addr) + '</div>' +
+      '<div>' + esc(l.price) + '</div>' +
+      '<div style="color:#6b7280;font-size:.78rem">' + esc(l.mls) + ' · attached automatically</div></div>' +
+      '<div class="lead-form">' +
+        '<div class="lf-title">Your details — 30 seconds ⏱</div>' +
+        '<div class="field"><label for="f-name">Full name *</label>' +
+          '<input id="f-name" type="text" placeholder="Jane Doe" autocomplete="name">' +
+          '<div class="ferror" id="e-name">Please enter your name.</div></div>' +
+        '<div class="field"><label for="f-contact">Phone or email *</label>' +
+          '<input id="f-contact" type="text" placeholder="416-555-0134 or jane@email.com" autocomplete="tel">' +
+          '<div class="ferror" id="e-contact">That doesn\'t look like a phone number or email — please double-check.</div></div>' +
+        '<div class="field"><label for="f-budget">Budget</label>' +
+          '<input id="f-budget" type="text" placeholder="e.g. $5M–$7M"></div>' +
+        '<div class="field"><label>Timeline</label>' +
+          chipRow(['ASAP','1–3 months','3–6 months','Just browsing'], 'timeline', form.timeline) + '</div>' +
+        '<div class="field"><label for="f-showing">Preferred showing time <span style="font-weight:400;color:#9ca3af">(optional)</span></label>' +
+          '<input id="f-showing" type="text" placeholder="e.g. Saturday afternoon"></div>' +
+        '<button class="submit-btn" id="form-submit">Send my details →</button>' +
+        '<div class="form-note">Goes straight to ' + esc(CONFIG.AGENT_NAME) + ' — instantly.</div>' +
+      '</div>';
+
+    document.getElementById('back-to-invite').onclick = renderInvite;
+
+    dmBody.querySelectorAll('.chip').forEach(c => {
+      c.onclick = () => {
+        const g = c.getAttribute('data-group');
+        form[g] = c.getAttribute('data-val');
+        dmBody.querySelectorAll('.chip[data-group="' + g + '"]').forEach(x => x.classList.remove('sel'));
+        c.classList.add('sel');
+      };
+    });
+
+    document.getElementById('form-submit').onclick = submitForm;
+  }
+
+  function fieldError(inputId, errId, bad){
+    const inp = document.getElementById(inputId);
+    const err = document.getElementById(errId);
+    inp.classList.toggle('bad', bad);
+    err.classList.toggle('show', bad);
+    return !bad;
+  }
+
+  function submitForm(){
+    const name = (document.getElementById('f-name').value || "").trim();
+    const contactRaw = (document.getElementById('f-contact').value || "").trim();
+    const budget = (document.getElementById('f-budget').value || "").trim();
+    const showing = (document.getElementById('f-showing').value || "").trim();
+
+    const okName = fieldError('f-name', 'e-name', name.length < 2);
+    const contact = parseContact(contactRaw);
+    const okContact = fieldError('f-contact', 'e-contact', contactRaw.length > 0 && !contact);
+    // empty contact also invalid:
+    const okContact2 = contactRaw.length === 0 ? fieldError('f-contact', 'e-contact', true) : true;
+
+    if (!okName || !okContact || !okContact2) return;
+
+    submitted = true;
+    const lead = {
+      name: name, contact: contact,
+      budget: budget || "Not specified",
+      timeline: form.timeline || "Not specified",
+      showing: showing || "No preference",
+      listing: CONFIG.LISTING.addr + " · " + CONFIG.LISTING.price + " (" + CONFIG.LISTING.mls + ")",
+      captured_at: new Date().toLocaleString("en-CA", { timeZone: "America/Toronto" })
+    };
+    renderSuccess(lead);
+  }
+
+  /* ---- DM view 3: success + the MOCK EMAIL the agent receives ---- */
+  function renderSuccess(lead){
+    const v = x => (x === undefined || x === null || x === "" ? "—" : x);
+    dmBody.innerHTML =
+      '<div class="success-note">✅ Sent! ' + esc(CONFIG.AGENT_NAME) + ' has your details.</div>' +
+      '<div class="email-card">' +
+        '<div class="em-head">' +
+          '<div><b>From:</b> The Papousek Team auto-leads &lt;leads@ppreteam.com&gt;</div>' +
+          '<div><b>To:</b> ' + esc(CONFIG.AGENT_NAME) + ' &lt;april@ppreteam.com&gt;</div>' +
+        '</div>' +
+        '<div class="em-subject">🔔 New Instagram lead — 1459 Stavebank Rd (Stavebank reel)</div>' +
+        '<div class="em-body">' +
+          '<div class="em-row">Hi ' + esc(CONFIG.AGENT_NAME.split(" ")[0]) + ' — a visitor just submitted the lead form from your Instagram reel:</div>' +
+          '<div class="em-row"><b>Name:</b> ' + esc(v(lead.name)) + '</div>' +
+          '<div class="em-row"><b>Contact:</b> ' + esc(v(lead.contact)) + '</div>' +
+          '<div class="em-row"><b>Budget:</b> ' + esc(v(lead.budget)) + '</div>' +
+          '<div class="em-row"><b>Timeline:</b> ' + esc(v(lead.timeline)) + '</div>' +
+          '<div class="em-row"><b>Preferred showing:</b> ' + esc(v(lead.showing)) + '</div>' +
+          '<div class="em-tag">🏠 Listing (auto-attached): ' + esc(v(lead.listing)) + '</div>' +
+          '<div class="em-row" style="margin-top:6px;color:#6b7280;font-size:.78rem">Submitted ' + esc(lead.captured_at) + ' ET</div>' +
+        '</div>' +
+        '<div class="em-foot">Sent automatically · In production this email lands in your inbox seconds after the visitor submits.</div>' +
+      '</div>';
+    dmBody.scrollTop = dmBody.scrollHeight;
+  }
+
+  dmClose.onclick = () => dmPanel.classList.remove('open');
+
+  // Brand the demo from CONFIG.
+  document.getElementById('ig-handle').textContent = CONFIG.IG_HANDLE;
+  document.getElementById('dm-agent-line').textContent = CONFIG.IG_HANDLE;
+  document.title = CONFIG.AGENCY_NAME + ' — Comment-to-Inbox Demo';
+})();
+</script>
+</body>
+</html>
